@@ -1,0 +1,12 @@
+[project]
+name = "restaurante"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.17.0",
+    "nest-asyncio>=1.6.0",
+    "python-a2a>=0.5.10",
+]
