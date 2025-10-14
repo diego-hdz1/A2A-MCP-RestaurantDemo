@@ -1,18 +1,30 @@
 from python_a2a import AgentNetwork
+from langchain_community.chat_models import ChatOpenAI
+from dotenv import load_dotenv
 import asyncio
 import logging
+import os
 from typing import List, Dict
 from Agents.HamburguerAgent import HamburguesaAgent
 from Agents.PizzaAgent import PizzaAgent
 from Agents.HotDogAgent import HotDogAgent
+from Prompts.PromptTemplates import orchestrator_prompt_template
 
-class RestaurantOrchestrator:
+
+class RestaurantOrchestrator():
     """Orquestador que coordina los agentes usando AgentCards y Skills"""
-    
+
     def __init__(self):
+        load_dotenv()
         self.network = AgentNetwork(name="Restaurant Agent Network")
         self.agents = {}  
         self.completed_orders = []
+
+        self.llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            api_key = os.getenv("OPENAI_API_KEY"),
+        )
+
         
     def setup_agents(self):
         """Configura y registra todos los agentes"""
@@ -28,9 +40,9 @@ class RestaurantOrchestrator:
         
         # Guardar referencias con acceso a AgentCard
         self.agents = {
-            "hamburguesa": hamburguesa_agent,
-            "hotdog": hotdog_agent,
-            "pizza": pizza_agent
+            "Hamburguesa Chef": hamburguesa_agent,
+            "Hot Dog Master": hotdog_agent,
+            "Pizza Artisan": pizza_agent
         }
         
         # Registrar en la red
@@ -41,7 +53,6 @@ class RestaurantOrchestrator:
         return hamburguesa_agent, hotdog_agent, pizza_agent
     
 
-    # Esto se va a cambiar por integracion con LLM 
     async def process_orders_with_llm_routing(self, orders: List[Dict]):
         """Procesa pedidos con enrutamiento inteligente basado en AgentCards"""
         logging.info("\n" + "=" * 70)
@@ -54,13 +65,29 @@ class RestaurantOrchestrator:
             logging.info(f"PEDIDO #{i}: {order['description']}")
             logging.info(f"{'─' * 70}")
             
-            # Simular análisis LLM usando AgentCards y Skills
             logging.info(f"\nAnalizando capacidades de agentes...")
-            selected_agent_name = self._smart_route(order['description'])
-            
-            logging.info(f"Agente seleccionado: {selected_agent_name.upper()}")
-            
-            agent = self.agents[selected_agent_name]
+
+            order_description = order['description']
+
+            agent_cards_info = []
+
+            for name, agent in self.agents.items():
+                card = agent.agent_card
+                agent_cards_info.append(card)
+
+            # Para obtener el nombre del agente dinamicamente por medio de LLM
+            chain = orchestrator_prompt_template | self.llm
+            response = chain.invoke({
+                "user_prompt": order_description,
+                "AgentCards": agent_cards_info
+            })
+
+            response = response.content
+
+            logging.info(f"System response for Orchestrator:\n{response}\n")
+
+            agent = self.agents[response]
+            logging.info(f"EL MEJOR AGENTES ES: {agent}")
             agent_card = agent.agent_card
             
             logging.info(f"Agent Card: {agent_card.name}")
@@ -85,7 +112,7 @@ class RestaurantOrchestrator:
             self.completed_orders.append({
                 "order_id": i,
                 "description": order['description'],
-                "agent": selected_agent_name,
+                "agent": response,
                 "agent_card": agent_card.name,
                 "skills_used": [skill.name for skill in agent_card.skills],
                 "status": "completed",
@@ -96,39 +123,6 @@ class RestaurantOrchestrator:
         
         self._print_summary()
     
-
-    # Esto se va a cambiar por integracion con LLM 
-    def _smart_route(self, description: str) -> str:
-        """
-        Enrutamiento inteligente basado en AgentCards y Skills
-        Simula un LLM analizando las capacidades de cada agente
-        """
-        desc_lower = description.lower()
-        
-        scores = {}
-        for name, agent in self.agents.items():
-            score = 0
-            agent_card = agent.agent_card
-            
-            for skill in agent_card.skills:
-                for tag in skill.tags:
-                    if tag.lower() in desc_lower:
-                        score += 10
-                
-                for example in skill.examples:
-                    if any(word in desc_lower for word in example.lower().split()):
-                        score += 5
-            
-            desc_words = agent_card.description.lower().split()
-            for word in desc_words:
-                if word in desc_lower:
-                    score += 2
-            
-            scores[name] = score
-            logging.info(f"   └─ {agent_card.name}: score = {score}")
-        
-        best_agent = max(scores, key=scores.get)
-        return best_agent
     
     def _print_summary(self):
         """Imprime resumen detallado con información de AgentCards"""
