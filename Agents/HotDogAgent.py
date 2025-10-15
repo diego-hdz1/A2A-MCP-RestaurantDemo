@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 import random
 import logging
+from MCP.McpClient import get_mcp_client
 
 class HotDogAgent(A2AServer):
     """Agente especializado en preparar hot dogs"""
@@ -34,6 +35,8 @@ class HotDogAgent(A2AServer):
         )
         
         super().__init__(agent_card=agent_card)
+
+        self.mcp_client = None
         
         logging.info(f"{agent_card.name} inicializado")
         logging.info(f"   └─ URL: {agent_card.url}")
@@ -41,15 +44,38 @@ class HotDogAgent(A2AServer):
         for skill in agent_card.skills:
             logging.info(f"      • {skill.name}: {skill.description}")
 
+    async def _ensure_mcp_connection(self):
+        """Asegura que hay una conexión MCP activa"""
+        if self.mcp_client is None:
+            self.mcp_client = await get_mcp_client()
+            # Listar tools disponibles
+            await self.mcp_client.list_tools()
 
-    # Aqui puede ir la llamada a la tool del MCP server
     async def preparar_hotdog(self, toppings: List[str] = None):
         """Prepara un hot dog paso a paso"""
         if toppings is None:
             toppings = ["mostaza", "ketchup", "cebolla", "relish"]
         
+        await self._ensure_mcp_connection()
+
         logging.info(f"\n[Hot Dog Master] Comenzando preparación...")
         
+        # 1. Log de inicio usando MCP
+        await self.mcp_client.call_tool(
+            "log_preparation_start",
+            {
+                "item_name": "Hamburguesa Gourmet",
+                "agent_name": "Hamburguesa Chef"
+            }
+        )
+        
+        # TODO: Checar que si sea lo de los toppings y no que sea directamente "ingredientes"
+        # 2. Validar ingredientes usando MCP
+        await self.mcp_client.call_tool(
+            "validate_ingredients",
+            {"ingredients": toppings}
+        )
+
         steps = [
             ("Seleccionando salchicha premium", 0.8),
             ("Asando a la perfección", 1.2),
@@ -68,6 +94,27 @@ class HotDogAgent(A2AServer):
                 "timestamp": datetime.now().isoformat()
             })
         
+        total_time = sum(d for _, d in steps)
+
+        # 4. Log de completado usando MCP
+        await self.mcp_client.call_tool(
+            "log_preparation_complete",
+            {
+                "item_name": "Hamburguesa Gourmet",
+                "agent_name": "Hamburguesa Chef",
+                "preparation_time": total_time
+            }
+        )
+        
+        # 5. Obtener score de calidad usando MCP
+        quality_result = await self.mcp_client.call_tool(
+            "get_quality_score",
+            {
+                "item_type": "hamburguesa",
+                "preparation_time": total_time
+            }
+        )
+
         logging.info(f"[Hot Dog Master] ¡Hot dog listo para disfrutar!")
         
         return {

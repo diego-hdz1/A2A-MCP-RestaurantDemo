@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 import random
 import logging
+from MCP.McpClient import get_mcp_client
 
 class PizzaAgent(A2AServer):
     """Agente especializado en preparar pizzas"""
@@ -32,6 +33,8 @@ class PizzaAgent(A2AServer):
         )
         
         super().__init__(agent_card=agent_card)
+
+        self.mcp_client = None
         
         logging.info(f"{agent_card.name} inicializado")
         logging.info(f"   └─ URL: {agent_card.url}")
@@ -39,14 +42,38 @@ class PizzaAgent(A2AServer):
         for skill in agent_card.skills:
             logging.info(f"      • {skill.name}: {skill.description}")
 
+    async def _ensure_mcp_connection(self):
+        """Asegura que hay una conexión MCP activa"""
+        if self.mcp_client is None:
+            self.mcp_client = await get_mcp_client()
+            # Listar tools disponibles
+            await self.mcp_client.list_tools()
+
 
     async def preparar_pizza(self, size: str = "mediana", toppings: List[str] = None):
         """Prepara una pizza paso a paso"""
         if toppings is None:
             toppings = ["pepperoni", "champiñones", "pimientos", "aceitunas"]
         
+        await self._ensure_mcp_connection()
+
         logging.info(f"\n[Pizza Artisan] Comenzando preparación de pizza {size}...")
         
+        # 1. Log de inicio usando MCP
+        await self.mcp_client.call_tool(
+            "log_preparation_start",
+            {
+                "item_name": "Hamburguesa Gourmet",
+                "agent_name": "Hamburguesa Chef"
+            }
+        )
+        
+        # 2. Validar ingredientes usando MCP
+        await self.mcp_client.call_tool(
+            "validate_ingredients",
+            {"ingredients": toppings}
+        )
+
         steps = [
             ("Amasando la masa artesanal", 1.5),
             ("Esparciendo salsa de tomate San Marzano", 0.7),
@@ -66,6 +93,28 @@ class PizzaAgent(A2AServer):
                 "timestamp": datetime.now().isoformat()
             })
         
+
+        total_time = sum(d for _, d in steps)
+        
+        # 4. Log de completado usando MCP
+        await self.mcp_client.call_tool(
+            "log_preparation_complete",
+            {
+                "item_name": "Hamburguesa Gourmet",
+                "agent_name": "Hamburguesa Chef",
+                "preparation_time": total_time
+            }
+        )
+        
+        # 5. Obtener score de calidad usando MCP
+        quality_result = await self.mcp_client.call_tool(
+            "get_quality_score",
+            {
+                "item_type": "hamburguesa",
+                "preparation_time": total_time
+            }
+        )
+
         logging.info(f"[Pizza Artisan] ¡Pizza lista y crujiente!")
         
         return {
